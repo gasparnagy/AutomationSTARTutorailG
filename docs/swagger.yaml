@@ -1,0 +1,317 @@
+openapi: 3.0.3
+info:
+  title: E-commerce Checkout API
+  version: 1.0.0
+  description: |
+    Sample e-commerce REST API with four endpoints: **register**, **login**, **cart** and **checkout**.
+
+    Data is stored in an in-memory database and is reset on every server restart.
+
+    **Business rule (checkout):** paying with `cash` gives a **10% discount**;
+    paying with `credit_card` gives **no discount**.
+
+    **Authentication:** call `POST /api/login`, then click **Authorize** and paste the returned token.
+servers:
+  - url: http://localhost:3000
+    description: Local server
+
+tags:
+  - name: Auth
+  - name: Cart
+  - name: Checkout
+
+paths:
+  /api/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/login:
+    post:
+      tags: [Auth]
+      summary: Log in and receive a bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/cart:
+    get:
+      tags: [Cart]
+      summary: Get the current user's cart
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Cart]
+      summary: Add a product to the cart
+      description: Adds the product, or increases its quantity if it is already in the cart.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCartRequest'
+      responses:
+        '201':
+          description: Updated cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/checkout:
+    post:
+      tags: [Checkout]
+      summary: Check out the current cart
+      description: |
+        Creates an order from the cart, reduces product stock and empties the cart.
+
+        - `cash` → 10% discount on the subtotal
+        - `credit_card` → no discount
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+            examples:
+              cash:
+                summary: Pay with cash (10% discount)
+                value: { paymentMethod: cash }
+              creditCard:
+                summary: Pay with credit card (no discount)
+                value: { paymentMethod: credit_card }
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid payment method, empty cart or not enough stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Something went wrong
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Dave Brown
+        email:
+          type: string
+          format: email
+          example: dave@example.com
+        password:
+          type: string
+          example: dave123
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@example.com
+        password:
+          type: string
+          example: alice123
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Alice Johnson
+        email:
+          type: string
+          example: alice@example.com
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: 3f9c0e1a8b7d4c2e9f1a0b3c4d5e6f708192a3b4c5d6e7f8
+        user:
+          $ref: '#/components/schemas/User'
+
+    AddToCartRequest:
+      type: object
+      required: [productId]
+      properties:
+        productId:
+          type: integer
+          description: 1 = Wireless Mouse, 2 = Mechanical Keyboard, 3 = USB-C Monitor 27"
+          example: 1
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+          example: 2
+
+    CartItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Wireless Mouse
+        unitPrice:
+          type: number
+          example: 25
+        quantity:
+          type: integer
+          example: 2
+        lineTotal:
+          type: number
+          example: 50
+
+    Cart:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        total:
+          type: number
+          example: 50
+
+    CheckoutRequest:
+      type: object
+      required: [paymentMethod]
+      properties:
+        paymentMethod:
+          type: string
+          enum: [cash, credit_card]
+
+    Order:
+      type: object
+      properties:
+        orderId:
+          type: integer
+          example: 1
+        userId:
+          type: integer
+          example: 1
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        paymentMethod:
+          type: string
+          enum: [cash, credit_card]
+        subtotal:
+          type: number
+          example: 50
+        discount:
+          type: number
+          example: 5
+        total:
+          type: number
+          example: 45
+        createdAt:
+          type: string
+          format: date-time
